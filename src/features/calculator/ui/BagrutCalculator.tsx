@@ -1,9 +1,6 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Trash2, GraduationCap, Info, Save } from "lucide-react";
-import { useAuthStore } from "@/features/auth";
-import { supabase } from "@/integrations/supabase/client";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Plus, Trash2, GraduationCap, Info } from "lucide-react";
 import { toast } from "sonner";
 import {
   bagrutUniversities,
@@ -45,8 +42,6 @@ const makeRow = (subject = "", units = 0): BagrutRow => ({
 });
 
 const BagrutCalculator: React.FC = () => {
-  const user = useAuthStore((s) => s.user);
-  const queryClient = useQueryClient();
   const [education, setEducation] = useState("");
   const [university, setUniversity] = useState("");
   const [rows, setRows] = useState<BagrutRow[]>(() => Array.from({ length: 5 }, () => makeRow()));
@@ -93,30 +88,6 @@ const BagrutCalculator: React.FC = () => {
       setTimeout(() => setGlowColor(null), 1200);
     }
   }, [rows, university, education]);
-
-  const saveBagrutResult = useMutation({
-    mutationFn: async () => {
-      if (!user || !result || !result.isValid) throw new Error("Missing data");
-      const { error } = await supabase.from("simulations").insert({
-        user_id: user.id,
-        university,
-        path: education,
-        score: result.avg,
-        result: {
-          avg: result.avg,
-          totalUnitsInCalc: result.totalUnitsInCalc,
-          totalUnitsEntered: result.totalUnitsEntered,
-          type: "bagrut",
-        },
-      } as any);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("תוצאת הבגרות נשמרה");
-      queryClient.invalidateQueries({ queryKey: ["simulations"] });
-    },
-    onError: () => toast.error("שגיאה בשמירה"),
-  });
 
   const sendToParent = useCallback(
     async (
@@ -408,16 +379,6 @@ const BagrutCalculator: React.FC = () => {
                 <GraduationCap className="h-6 w-6 text-primary" />
                 <h3 className="text-lg font-semibold text-foreground">תוצאות חישוב</h3>
               </div>
-              {user && (
-                <button
-                  onClick={() => saveBagrutResult.mutate()}
-                  disabled={saveBagrutResult.isPending}
-                  className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
-                >
-                  <Save className="h-3.5 w-3.5" />
-                  {saveBagrutResult.isPending ? "שומר..." : "שמירת תוצאה"}
-                </button>
-              )}
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg bg-background/50 p-4 text-center">

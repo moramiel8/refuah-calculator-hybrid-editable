@@ -1,9 +1,6 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, Copy, Info, Save } from "lucide-react";
-import { useAuthStore } from "@/features/auth";
-import { supabase } from "@/integrations/supabase/client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   calculateSechem,
   getInputLabels,
@@ -38,8 +35,6 @@ const sectionAnim = {
 };
 
 const SechemCalculator: React.FC = () => {
-  const user = useAuthStore((s) => s.user);
-  const queryClient = useQueryClient();
   const [localSavedResults, setLocalSavedResults] = useState<any[]>([]);
 
   const [mode, setMode] = useState<CalcMode>("initial");
@@ -225,24 +220,7 @@ const SechemCalculator: React.FC = () => {
     return getUniInfo(selectedUni);
   }, [selectedUni]);
 
-  // Load saved simulations
-  const { data: savedResults } = useQuery({
-    queryKey: ["simulations", user?.id],
-    queryFn: async () => {
-      if (!user) return [];
-      const { data } = await supabase
-        .from("simulations")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(10);
-      return data ?? [];
-    },
-    enabled: !!user,
-  });
-
   React.useEffect(() => {
-    if (user) return;
     try {
       const raw = localStorage.getItem("sechemeter-local-simulations");
       const parsed = raw ? JSON.parse(raw) : [];
@@ -250,31 +228,7 @@ const SechemCalculator: React.FC = () => {
     } catch {
       setLocalSavedResults([]);
     }
-  }, [user]);
-
-  const saveResult = useMutation({
-    mutationFn: async (entry: { uniKey: string; channel: string; result: CalcResult }) => {
-      if (!user) throw new Error("לא מחובר");
-      const { error } = await supabase.from("simulations").insert({
-        user_id: user.id,
-        university: entry.uniKey,
-        path: entry.channel,
-        score: typeof entry.result.sechem === "number" ? entry.result.sechem : null,
-        result: {
-          sechem: entry.result.sechem,
-          label: entry.result.label,
-          details: entry.result.details,
-          topValue, bottomValue, extValue,
-        },
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("התוצאה נשמרה בהצלחה");
-      queryClient.invalidateQueries({ queryKey: ["simulations"] });
-    },
-    onError: () => toast.error("שגיאה בשמירת התוצאה"),
-  });
+  }, []);
 
   const handleCalculate = useCallback(async () => {
     if (!selectedChannel) return;
@@ -707,9 +661,6 @@ const SechemCalculator: React.FC = () => {
                   </div>
                 )}
               </div>
-              {result.isValid && !result.thresholdOnly && user && (
-                <div />
-              )}
               {result.isValid && !result.thresholdOnly && (
                 <div className="flex items-center gap-2">
                   <button
@@ -728,15 +679,6 @@ const SechemCalculator: React.FC = () => {
                   </button>
                   <button
                     onClick={() => {
-                      if (user) {
-                        saveResult.mutate({
-                          uniKey: isMorkam ? "MORKAM" : effectiveUniKey,
-                          channel: selectedChannel,
-                          result,
-                        });
-                        return;
-                      }
-
                       const entry = {
                         id: `local-${Date.now()}`,
                         university: isMorkam ? "MORKAM" : effectiveUniKey,
@@ -748,11 +690,10 @@ const SechemCalculator: React.FC = () => {
                       localStorage.setItem("sechemeter-local-simulations", JSON.stringify(next));
                       toast.success("התוצאה נשמרה מקומית");
                     }}
-                    disabled={saveResult.isPending}
                     className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
                   >
                     <Save className="h-3.5 w-3.5" />
-                    {saveResult.isPending ? "שומר..." : "שמירה"}
+                    שמירה
                   </button>
                 </div>
               )}
@@ -762,14 +703,14 @@ const SechemCalculator: React.FC = () => {
       </AnimatePresence>
 
       {/* Saved Results */}
-      {((user && savedResults && savedResults.length > 0) || (!user && localSavedResults.length > 0)) && (
+      {localSavedResults.length > 0 && (
         <div className="rounded-xl border border-border bg-card shadow-sm">
           <button
             onClick={() => setShowInfo(!showInfo)}
             className="flex w-full items-center justify-between p-4"
           >
             <h3 className="text-sm font-semibold text-foreground">
-              תוצאות שנשמרו ({user ? savedResults?.length ?? 0 : localSavedResults.length})
+              תוצאות שנשמרו ({localSavedResults.length})
             </h3>
             <ChevronDown
               className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${showInfo ? "rotate-180" : ""}`}
@@ -780,7 +721,7 @@ const SechemCalculator: React.FC = () => {
               <motion.div {...sectionAnim} className="overflow-hidden">
                 <div className="border-t border-border px-4 pb-4">
                   <div className="divide-y divide-border/50">
-                    {(user ? savedResults ?? [] : localSavedResults).map((sim: any) => (
+                    {localSavedResults.map((sim: any) => (
                       <div key={sim.id} className="flex items-center justify-between py-2.5 text-sm">
                         <div>
                           <span className="font-medium text-foreground">

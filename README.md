@@ -17,3 +17,4 @@ npm run build
 ## Notes
 - UI/animations come from Refuah calculator shell.
 - v6.1 editable source files are included for maintenance and formula/config reference.
+- This repo is the **standalone calculator**: it does **not** use Supabase. Saving is via **localStorage** (סכמים) or **postMessage** to Refuah (כפתורי בגרות ב־iframe בלבד).

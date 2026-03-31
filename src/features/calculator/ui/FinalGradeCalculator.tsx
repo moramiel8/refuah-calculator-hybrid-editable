@@ -1,10 +1,6 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { RotateCcw, Save } from "lucide-react";
-import { useAuthStore } from "@/features/auth";
-import { supabase } from "@/integrations/supabase/client";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { RotateCcw } from "lucide-react";
 import { subjectsConfig, calculateFinalGrade, type SubjectConfig } from "@/features/calculator/lib/final-grade-config";
 
 /** Extract unique base subject names (without unit suffixes) */
@@ -28,8 +24,6 @@ function getUnitOptions(baseSubject: string): SubjectConfig[] {
 }
 
 const FinalGradeCalculator: React.FC = () => {
-  const user = useAuthStore((s) => s.user);
-  const queryClient = useQueryClient();
   const [selectedBaseSubject, setSelectedBaseSubject] = useState("");
   const [selectedUnits, setSelectedUnits] = useState<number | null>(null);
   const [inputs, setInputs] = useState<Record<string, number | undefined>>({});
@@ -97,30 +91,6 @@ const FinalGradeCalculator: React.FC = () => {
   const handleClear = useCallback(() => {
     setInputs({});
   }, []);
-
-  const saveResult = useMutation({
-    mutationFn: async () => {
-      if (!user || finalGrade === null || !config) throw new Error("Missing");
-      const { error } = await supabase.from("simulations").insert({
-        user_id: user.id,
-        university: "general",
-        path: "final-grade",
-        score: finalGrade,
-        result: {
-          subject: config.subject,
-          units: config.units,
-          grade: finalGrade,
-          type: "final-grade",
-        },
-      } as any);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("התוצאה נשמרה בהצלחה");
-      queryClient.invalidateQueries({ queryKey: ["simulations"] });
-    },
-    onError: () => toast.error("שגיאה בשמירה"),
-  });
 
   return (
     <div className="space-y-6" dir="rtl">
@@ -256,18 +226,6 @@ const FinalGradeCalculator: React.FC = () => {
                     {finalGrade}
                   </motion.p>
                 </div>
-                {user && (
-                  <div className="flex justify-center">
-                    <button
-                      onClick={() => saveResult.mutate()}
-                      disabled={saveResult.isPending}
-                      className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
-                    >
-                      <Save className="h-3.5 w-3.5" />
-                      {saveResult.isPending ? "שומר..." : "שמירת תוצאה"}
-                    </button>
-                  </div>
-                )}
               </div>
             ) : null}
           </motion.div>
