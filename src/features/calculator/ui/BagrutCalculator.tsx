@@ -343,7 +343,7 @@ const BagrutCalculator: React.FC = () => {
               disabled={!result?.isValid}
               className="rounded-lg border border-border bg-secondary px-3 py-2 text-xs font-medium text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
             >
-              שמירה לפרופיל ב-Refuah
+              שמירה לפרופיל באיזור האישי
             </button>
             <button
               onClick={() =>
@@ -356,7 +356,7 @@ const BagrutCalculator: React.FC = () => {
               disabled={!result?.isValid}
               className="rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              שיתוף נתונים אנונימי ב-Refuah
+              שיתוף נתונים אנונימי בטבלת המועמדים באתר
             </button>
           </div>
           {!result?.isValid && <p className="text-center text-xs text-muted-foreground">הכפתורים יופעלו אחרי חישוב תוצאה תקינה.</p>}
