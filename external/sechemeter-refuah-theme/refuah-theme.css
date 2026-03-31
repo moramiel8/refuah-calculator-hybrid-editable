@@ -1,0 +1,488 @@
+/**
+ * Refuah.io — מראה תואם ל־CalculatorTabs + SechemCalculator (מצב debug).
+ * להוסיף לפרויקט sechemeter אחרי כל ה־@import הקיימים ב־index.css.
+ *
+ * דורש: data-theme="refuah" או ?refuah=1 + הסקריפט ב־README.
+ */
+
+@import url("https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;500;600;700&display=swap");
+
+/* טוקנים גלובליים — כדי שטאבים / פאנלים יעבדו גם לפני החלפת data-theme */
+:root {
+	--primary-color: hsl(210, 60%, 52%);
+	--secondary-color: hsl(210, 55%, 42%);
+	--tertiary-color: hsl(178, 35%, 92%);
+	--muted-foreground: hsl(215, 13%, 50%);
+	--border-color: hsl(214, 18%, 91%);
+	--secondary-bg: hsl(210, 18%, 96%);
+	--card-bg: hsl(0, 0%, 100%);
+	--table-border-color: hsl(214, 18%, 82%);
+	--table-text-color: hsl(220, 20%, 18%);
+	--table-th-color: hsl(210, 45%, 92%);
+	--table-lines-color: hsl(214, 18%, 90%);
+	--primary-color-rgb: 74, 144, 217;
+	--accent-bg: hsl(178, 40%, 94%);
+	--accent-fg: hsl(178, 52%, 28%);
+}
+
+/* --- טוקנים (מקביל ל־:root ב־src/index.css של Refuah) --- */
+[data-theme="refuah"] {
+	--primary-color: hsl(210, 60%, 52%);
+	--secondary-color: hsl(210, 55%, 42%);
+	--tertiary-color: hsl(178, 35%, 92%);
+	--muted-foreground: hsl(215, 13%, 50%);
+	--border-color: hsl(214, 18%, 91%);
+	--secondary-bg: hsl(210, 18%, 96%);
+	--card-bg: hsl(0, 0%, 100%);
+	--table-border-color: hsl(214, 18%, 82%);
+	--table-text-color: hsl(220, 20%, 18%);
+	--table-th-color: hsl(210, 45%, 92%);
+	--table-lines-color: hsl(214, 18%, 90%);
+	--primary-color-rgb: 74, 144, 217;
+	--accent-bg: hsl(178, 40%, 94%);
+	--accent-fg: hsl(178, 52%, 28%);
+}
+
+html {
+	scroll-behavior: auto;
+}
+
+body {
+	font-family: "Assistant", "Segoe UI", system-ui, sans-serif !important;
+	background-color: hsl(210, 20%, 96%) !important;
+	color: hsl(220, 20%, 14%);
+}
+
+/* Shell + טאבים ראשיים (כמו CalculatorTabs) */
+#app-shell.container.active {
+	display: flex !important;
+	flex-direction: column;
+	align-items: stretch;
+	width: 100%;
+	max-width: 640px;
+	margin-left: auto;
+	margin-right: auto;
+	padding-bottom: 20px !important;
+}
+
+.refuah-tab-panel {
+	display: none;
+	width: 100%;
+	flex-direction: column;
+	align-items: center;
+	box-sizing: border-box;
+}
+
+.refuah-tab-panel.refuah-tab-panel--active {
+	display: flex;
+}
+
+.refuah-main-tabs {
+	display: flex;
+	gap: 4px;
+	width: 100%;
+	margin-bottom: 24px;
+	padding: 4px;
+	border-radius: 12px;
+	border: 1px solid var(--border-color);
+	background-color: var(--card-bg);
+	box-shadow: 0 1px 3px 0 hsl(214 18% 50% / 0.06),
+		0 1px 2px -1px hsl(214 18% 50% / 0.06);
+	box-sizing: border-box;
+}
+
+.refuah-main-tab {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 10px 12px;
+	border: none !important;
+	border-radius: 8px !important;
+	background: transparent !important;
+	color: var(--muted-foreground) !important;
+	font-size: 14px;
+	font-weight: 500;
+	font-family: inherit;
+	cursor: pointer;
+	transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+	box-shadow: none !important;
+	transform: none !important;
+}
+
+.refuah-main-tab:hover {
+	background-color: var(--accent-bg) !important;
+	color: hsl(220, 20%, 14%) !important;
+}
+
+.refuah-main-tab--active,
+.refuah-main-tab.refuah-main-tab--active {
+	background-color: var(--primary-color) !important;
+	color: #fff !important;
+	box-shadow: 0 1px 2px hsl(214 18% 50% / 0.08) !important;
+}
+
+.refuah-main-tab--active:hover,
+.refuah-main-tab.refuah-main-tab--active:hover {
+	background-color: var(--secondary-color) !important;
+	color: #fff !important;
+}
+
+.refuah-main-tab-icon {
+	flex-shrink: 0;
+}
+
+/* מצב סכם ראשוני / סופי — כמו SechemCalculator */
+.refuah-field-label {
+	display: block;
+	margin-bottom: 8px;
+	font-size: 14px;
+	font-weight: 500;
+	color: hsl(220, 20%, 14%);
+	text-align: right;
+	width: 100%;
+}
+
+/* אפיק קבלה — כמו כרטיס motion.div ב־SechemCalculator (rounded-xl border bg-card p-5 shadow-sm) */
+.refuah-admission-track-card {
+	width: 100%;
+	margin-top: 12px;
+	margin-bottom: 10px;
+	padding: 20px;
+	border-radius: 12px;
+	border: 1px solid hsl(214, 18%, 91%);
+	background-color: hsl(0, 0%, 100%);
+	box-shadow: 0 1px 3px 0 hsl(214 18% 50% / 0.06),
+		0 1px 2px -1px hsl(214 18% 50% / 0.06);
+	box-sizing: border-box;
+}
+
+.refuah-admission-track-card .refuah-field-label,
+#sechem-channel-heading {
+	margin-top: 0;
+	margin-bottom: 8px;
+	font-weight: 500;
+	font-size: 14px;
+}
+
+.refuah-admission-track-card .refuah-admission-select-wrap.select-container,
+.refuah-admission-track-card .select-container {
+	display: flex !important;
+	justify-content: flex-start !important;
+	align-items: flex-start !important;
+	flex-wrap: wrap !important;
+	width: 100% !important;
+	margin-bottom: 0 !important;
+}
+
+.refuah-visually-hidden {
+	position: absolute !important;
+	width: 1px !important;
+	height: 1px !important;
+	padding: 0 !important;
+	margin: -1px !important;
+	overflow: hidden !important;
+	clip: rect(0, 0, 0, 0) !important;
+	white-space: nowrap !important;
+	border: 0 !important;
+}
+
+.refuah-mode-toggle {
+	display: flex;
+	gap: 4px;
+	width: 100%;
+	margin-bottom: 12px;
+	padding: 4px;
+	border-radius: 12px;
+	border: 1px solid var(--border-color);
+	background-color: var(--card-bg);
+	box-shadow: 0 1px 2px hsl(214 18% 50% / 0.04);
+	box-sizing: border-box;
+}
+
+.refuah-mode-btn {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 2px;
+	padding: 12px 14px !important;
+	border: none !important;
+	border-radius: 8px !important;
+	background: transparent !important;
+	color: var(--muted-foreground) !important;
+	cursor: pointer;
+	font-family: inherit;
+	transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+	box-shadow: none !important;
+	transform: none !important;
+}
+
+.refuah-mode-btn:hover {
+	background-color: var(--accent-bg) !important;
+	color: hsl(220, 20%, 14%) !important;
+}
+
+.refuah-mode-btn--active,
+.refuah-mode-btn.refuah-mode-btn--active {
+	background-color: var(--primary-color) !important;
+	color: #fff !important;
+	box-shadow: 0 1px 2px hsl(214 18% 50% / 0.08) !important;
+}
+
+.refuah-mode-btn-title {
+	font-size: 16px;
+	font-weight: 600;
+	line-height: 1.2;
+}
+
+.refuah-mode-btn-sub {
+	font-size: 11px;
+	line-height: 1.3;
+	opacity: 0.85;
+	font-weight: 500;
+}
+
+.refuah-mode-btn--active .refuah-mode-btn-sub,
+.refuah-mode-btn.refuah-mode-btn--active .refuah-mode-btn-sub {
+	opacity: 0.75;
+	color: rgba(255, 255, 255, 0.85) !important;
+}
+
+/* Placeholder ציון סופי */
+.refuah-final-placeholder-text {
+	margin: 0;
+	font-size: 14px;
+	line-height: 1.6;
+	color: hsl(220, 20%, 14%);
+	text-align: right;
+}
+
+/* כרטיס ראשי — כמו rounded-xl border bg-card shadow-sm */
+.container.active {
+	background-color: hsl(0, 0%, 100%);
+	border: 1px solid hsl(214, 18%, 91%);
+	border-radius: 12px;
+	box-shadow: 0 1px 3px 0 hsl(214 18% 50% / 0.06), 0 1px 2px -1px hsl(214 18% 50% / 0.06);
+	max-width: 640px;
+	padding: 20px;
+	padding-bottom: 0;
+}
+
+/* מקטעי בחירה / חישוב — כמו כרטיסי משנה ב־SechemCalculator */
+.choice-section,
+.calculate-section {
+	border-radius: 12px !important;
+	border: 1px solid hsl(214, 18%, 91%) !important;
+	box-shadow: none !important;
+	background-color: hsl(0, 0%, 100%) !important;
+	width: 100% !important;
+}
+
+.calculate-section {
+	background-color: hsl(210, 18%, 97%) !important;
+}
+
+.choice-section,
+.calculate-section {
+	border-left: 1px solid hsl(214, 18%, 91%) !important;
+	border-right: 1px solid hsl(214, 18%, 91%) !important;
+}
+
+.choice-section h2,
+.calculate-section h2 {
+	color: hsl(220, 20%, 14%) !important;
+	font-weight: 600;
+}
+
+/* כפתורי פעולה ראשיים — לא חלים על טאבים / מצב / pills */
+button:not(.toggle-container):not(.switch-frame-button):not(.refuah-main-tab):not(
+		.refuah-mode-btn
+	):not(.sechem-admission-channel-button) {
+	background-color: var(--primary-color) !important;
+	color: #fff !important;
+	border-radius: 9999px !important;
+	border: none !important;
+	box-shadow: 0 1px 2px hsl(214 18% 50% / 0.08) !important;
+	font-weight: 600;
+	transition: background-color 0.2s ease, transform 0.15s ease;
+}
+
+button:not(.toggle-container):not(.switch-frame-button):not(.refuah-main-tab):not(
+		.refuah-mode-btn
+	):not(.sechem-admission-channel-button):hover {
+	background-color: var(--secondary-color) !important;
+	transform: translateY(-1px);
+}
+
+.switch-frame-button {
+	background-color: hsl(210, 18%, 96%) !important;
+	color: hsl(220, 15%, 25%) !important;
+	border: 1px solid hsl(214, 18%, 91%) !important;
+	border-radius: 10px !important;
+	font-weight: 600;
+	box-shadow: none !important;
+	width: auto !important;
+	max-width: 100%;
+	padding-inline: 16px !important;
+}
+
+.switch-frame-button:hover {
+	background-color: hsl(178, 40%, 94%) !important;
+	color: hsl(178, 52%, 28%) !important;
+	transform: translateY(-1px);
+}
+
+input[type="number"],
+input[type="text"] {
+	border: 1px solid hsl(214, 18%, 91%) !important;
+	border-radius: 8px !important;
+}
+
+input:focus {
+	border-color: hsl(210, 60%, 52%) !important;
+	box-shadow: 0 0 0 2px hsl(210 60% 52% / 0.2) !important;
+}
+
+.top-select,
+.bottom-select {
+	border: 1px solid hsl(214, 18%, 91%) !important;
+	border-radius: 9999px !important;
+	font-family: "Assistant", "Segoe UI", system-ui, sans-serif !important;
+	background: #fff !important;
+	padding: 12px 14px !important;
+	width: 100% !important;
+	text-align: center !important;
+}
+
+.choice-section select:not(.table-select),
+.calculate-section #calc-button {
+	border: 1px solid hsl(214, 18%, 91%) !important;
+	border-radius: 9999px !important;
+}
+
+#sechem-adminission-channels.top-select {
+	width: 60% !important;
+	max-width: 380px !important;
+	margin: 0 auto !important;
+}
+
+#sechem-adminission-channels {
+	display: none !important;
+}
+
+/* flex flex-wrap gap-2 + יישור התחלה (ב־RTL = ימין) כמו Refuah */
+.sechem-admission-channel-buttons {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-start;
+	align-content: flex-start;
+	gap: 8px;
+	width: 100%;
+	max-width: 100%;
+	margin-top: 0;
+	box-sizing: border-box;
+}
+
+.sechem-admission-channel-button {
+	flex: 0 1 auto;
+	background: var(--secondary-bg) !important;
+	color: hsl(220, 15%, 25%) !important;
+	border: 1px solid hsl(214, 18%, 91%) !important;
+	border-radius: 8px !important;
+	padding: 8px 16px !important;
+	box-shadow: none !important;
+	font-weight: 500;
+	font-size: 14px;
+	line-height: 1.25;
+	text-align: center;
+	white-space: nowrap;
+	max-width: 100%;
+	transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease,
+		box-shadow 0.2s ease;
+}
+
+.sechem-admission-channel-button:hover {
+	background: var(--accent-bg) !important;
+	border-color: hsl(214, 18%, 91%) !important;
+	color: hsl(220, 20%, 14%) !important;
+}
+
+.sechem-admission-channel-button.selected {
+	background-color: var(--primary-color) !important;
+	color: #fff !important;
+	border-color: var(--primary-color) !important;
+	box-shadow: 0 1px 2px hsl(214 18% 50% / 0.08) !important;
+}
+
+.results-div {
+	background-color: hsl(210, 40%, 98%) !important;
+	border: 1px solid hsl(210 60% 52% / 0.25) !important;
+	border-radius: 12px !important;
+	color: hsl(220, 20%, 14%);
+}
+
+/* Toggle ישן (אם נשאר בדף) */
+.toggle-container {
+	border-radius: 9999px !important;
+	background: #fff !important;
+	border: 1px solid var(--primary-color) !important;
+}
+
+.toggle-container::before {
+	background: var(--primary-color) !important;
+	border-radius: 9999px !important;
+	left: auto !important;
+	right: 0% !important;
+}
+
+.toggle-checkbox + .toggle-container div:first-child {
+	color: var(--primary-color) !important;
+}
+.toggle-checkbox + .toggle-container div:last-child {
+	color: #fff !important;
+}
+.toggle-checkbox:checked + .toggle-container div:first-child {
+	color: #fff !important;
+}
+.toggle-checkbox:checked + .toggle-container div:last-child {
+	color: var(--primary-color) !important;
+}
+
+.toggle-checkbox:checked + .toggle-container::before {
+	right: auto !important;
+	left: 0% !important;
+}
+
+.toggle-container {
+	padding: 0 !important;
+	height: 42px !important;
+	font-size: 14px !important;
+	border-radius: 9999px !important;
+}
+
+.toggle-container div {
+	padding: 10px 16px !important;
+}
+
+.sechem-table {
+	border-color: var(--table-border-color) !important;
+	border-radius: 8px;
+	overflow: hidden;
+}
+
+.sechem-table th {
+	background-color: var(--table-th-color) !important;
+	color: var(--table-text-color) !important;
+}
+
+#loading-overlay {
+	background-color: hsl(210 20% 98% / 0.92) !important;
+}
+
+.spinner {
+	border-color: hsl(214, 18%, 91%) !important;
+	border-top-color: var(--primary-color) !important;
+}

@@ -1,0 +1,5 @@
+
+ALTER TABLE public.libraries 
+ADD COLUMN IF NOT EXISTS folder_id uuid REFERENCES public.libraries(id) ON DELETE CASCADE DEFAULT NULL,
+ADD COLUMN IF NOT EXISTS is_folder boolean NOT NULL DEFAULT false,
+ADD COLUMN IF NOT EXISTS link_url text DEFAULT NULL;

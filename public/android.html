@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Install Refuah</title>
+    <meta name="robots" content="noindex" />
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+        background: #0b0b0c;
+        color: #f4f4f5;
+      }
+      .wrap {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+      .card {
+        width: 100%;
+        max-width: 560px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .title { font-size: 18px; font-weight: 800; }
+      .text { font-size: 13px; opacity: 0.9; line-height: 1.55; }
+      .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+      a.btn {
+        display: inline-block;
+        padding: 10px 14px;
+        border-radius: 12px;
+        font-weight: 700;
+        text-decoration: none;
+      }
+      a.primary { background: #2563eb; color: #fff; }
+      a.secondary { border: 1px solid rgba(255,255,255,.18); color: #f4f4f5; }
+      .small { font-size: 12px; opacity: .75; margin-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <div class="title">אתר מועמדים לרפואה עבור מכשירי Android</div>
+        <div class="text">
+          כדי להשתמש באתר מועמדים לרפואה עבור מכשירי Android, נא להתקין את האפליקציה. הגרסה של הדפדפן עבור Android נכשלת כעת על מכשירים מסוימים.
+        </div>
+        <div class="actions">
+          <a class="btn primary" href="https://play.google.com/store/apps/details?id=io.refuah.app" rel="noopener"
+            >הורדה מ-Google Play</a
+          >
+          <a class="btn secondary" href="/?web=1">המשך לאתר (לא נתמך)</a>
+        </div>
+        <div class="small">
+          טיפ: אם הגעתם לדף בטעות, פתחו את האתר עם <code>?web=1</code>.
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+
