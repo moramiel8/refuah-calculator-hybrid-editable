@@ -1,1 +1,0 @@
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS permissions text[] NOT NULL DEFAULT '{}'::text[];

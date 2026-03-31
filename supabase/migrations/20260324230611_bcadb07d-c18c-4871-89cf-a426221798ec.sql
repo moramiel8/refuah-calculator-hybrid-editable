@@ -1,1 +1,0 @@
-ALTER TABLE public.libraries ADD COLUMN IF NOT EXISTS color text DEFAULT NULL;

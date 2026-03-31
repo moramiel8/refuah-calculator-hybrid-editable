@@ -1,1 +1,0 @@
-ALTER TABLE public.libraries ADD COLUMN IF NOT EXISTS sort_order integer NOT NULL DEFAULT 0;
