@@ -48,6 +48,7 @@ const SechemCalculator: React.FC = () => {
 
   const [result, setResult] = useState<CalcResult | null>(null);
   const [lastInitialSechem, setLastInitialSechem] = useState<number | null>(null);
+  const [lastFinalSechem, setLastFinalSechem] = useState<number | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [showUniInfo, setShowUniInfo] = useState(false);
@@ -284,6 +285,9 @@ const SechemCalculator: React.FC = () => {
         if (mode === "initial" && typeof res.sechem === "number") {
           setLastInitialSechem(res.sechem);
         }
+        if (mode === "final" && typeof res.sechem === "number") {
+          setLastFinalSechem(res.sechem);
+        }
         setResultGlow(true);
         setTimeout(() => setResultGlow(false), 1200);
       }
@@ -291,6 +295,100 @@ const SechemCalculator: React.FC = () => {
       setIsCalculating(false);
     }
   }, [selectedChannel, selectedUni, selectedSubChannel, effectiveChannel, effectiveUniKey, topValue, bottomValue, extValue, isMorkam, mode]);
+
+  const iframeUniversityCode = useMemo(() => {
+    if (selectedChannel === "MORKAM") return "MORKAM";
+    if (selectedChannel === "TZAMERET") return "TZAMERET";
+    return effectiveUniKey;
+  }, [selectedChannel, effectiveUniKey]);
+
+  const iframeUniversityName = useMemo(() => {
+    if (selectedChannel === "MORKAM") return "מורכם";
+    return uniDisplayNames[effectiveUniKey] ?? uniDisplayNames[iframeUniversityCode] ?? iframeUniversityCode;
+  }, [selectedChannel, effectiveUniKey, iframeUniversityCode]);
+
+  const sendToParent = useCallback(
+    async (
+      type: "REFUAH_SAVE_SAKAM_TO_PROFILE" | "REFUAH_SHARE_ANON_DATA",
+      payload: Record<string, unknown>,
+    ) => {
+      if (typeof window === "undefined" || window.parent === window) {
+        toast.error("הכפתור פעיל רק כאשר המחשבון נטען בתוך Refuah (iframe)");
+        return;
+      }
+
+      const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const ack = new Promise<{ ok: boolean; error?: string }>((resolve, reject) => {
+        const timeout = window.setTimeout(() => {
+          window.removeEventListener("message", onMessage);
+          reject(new Error("לא התקבלה תגובה מ-Refuah"));
+        }, 5000);
+
+        const onMessage = (event: MessageEvent) => {
+          const data = event.data as any;
+          if (!data || data.source !== "refuah-parent" || data.type !== "REFUAH_IFRAME_ACK" || data.requestId !== requestId) {
+            return;
+          }
+          window.clearTimeout(timeout);
+          window.removeEventListener("message", onMessage);
+          resolve({ ok: !!data.ok, error: data.error ? String(data.error) : undefined });
+        };
+
+        window.addEventListener("message", onMessage);
+      });
+
+      window.parent.postMessage(
+        {
+          source: "sechemeter-iframe",
+          type,
+          requestId,
+          payload,
+        },
+        "*",
+      );
+
+      try {
+        const response = await ack;
+        if (!response.ok) {
+          toast.error(response.error || "Refuah דחה את הבקשה");
+          return;
+        }
+        toast.success("הנתונים נשלחו ל-Refuah בהצלחה");
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "שגיאה בשליחת נתונים");
+      }
+    },
+    [],
+  );
+
+  const buildSakamPayload = useCallback(
+    (resultForMerge: CalcResult | null) => {
+      const si =
+        mode === "initial" && resultForMerge?.isValid && typeof resultForMerge.sechem === "number"
+          ? resultForMerge.sechem
+          : lastInitialSechem;
+      const sf =
+        mode === "final" && resultForMerge?.isValid && typeof resultForMerge.sechem === "number"
+          ? resultForMerge.sechem
+          : lastFinalSechem;
+      return {
+        sakamInitial: si,
+        sakamFinal: sf,
+        universityCode: iframeUniversityCode,
+        universityName: iframeUniversityName,
+      };
+    },
+    [mode, lastInitialSechem, lastFinalSechem, iframeUniversityCode, iframeUniversityName],
+  );
+
+  const refuahSakamPayload = useMemo(() => buildSakamPayload(result), [buildSakamPayload, result]);
+  const hasRefuahSakamValues = useMemo(() => {
+    const p = refuahSakamPayload;
+    return (
+      (p.sakamInitial != null && Number.isFinite(Number(p.sakamInitial))) ||
+      (p.sakamFinal != null && Number.isFinite(Number(p.sakamFinal)))
+    );
+  }, [refuahSakamPayload]);
 
   const handleModeChange = (newMode: CalcMode) => {
     setMode(newMode);
@@ -662,40 +760,75 @@ const SechemCalculator: React.FC = () => {
                 )}
               </div>
               {result.isValid && !result.thresholdOnly && (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(String(result.sechem));
-                        toast.success("הסכם הועתק");
-                      } catch {
-                        toast.error("שגיאה בהעתקה");
-                      }
-                    }}
-                    className="flex items-center gap-1.5 rounded-lg border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground transition-all hover:bg-accent"
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                    העתקה
-                  </button>
-                  <button
-                    onClick={() => {
-                      const entry = {
-                        id: `local-${Date.now()}`,
-                        university: isMorkam ? "MORKAM" : effectiveUniKey,
-                        path: selectedChannel,
-                        score: typeof result.sechem === "number" ? result.sechem : null,
-                      };
-                      const next = [entry, ...localSavedResults].slice(0, 10);
-                      setLocalSavedResults(next);
-                      localStorage.setItem("sechemeter-local-simulations", JSON.stringify(next));
-                      toast.success("התוצאה נשמרה מקומית");
-                    }}
-                    className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    <Save className="h-3.5 w-3.5" />
-                    שמירה
-                  </button>
-                </div>
+                <>
+                  <div className="flex w-full max-w-xl flex-col gap-2">
+                    <p className="text-center text-xs font-medium text-foreground">
+                      Refuah — שמירה בפרופיל ושיתוף אנונימי בטבלה
+                    </p>
+                    <div className="flex w-full flex-col items-stretch justify-center gap-2 sm:flex-row sm:flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!hasRefuahSakamValues) {
+                            toast.error("חישוב סכם תקין לפני שמירה לפרופיל");
+                            return;
+                          }
+                          void sendToParent("REFUAH_SAVE_SAKAM_TO_PROFILE", refuahSakamPayload);
+                        }}
+                        disabled={!hasRefuahSakamValues}
+                        className="inline-flex min-h-[42px] flex-1 items-center justify-center rounded-full border-2 border-border bg-background px-4 py-2.5 text-center text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        שמירה לפרופיל באיזור האישי
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void sendToParent("REFUAH_SHARE_ANON_DATA", refuahSakamPayload)}
+                        disabled={!hasRefuahSakamValues}
+                        className="inline-flex min-h-[42px] flex-1 items-center justify-center rounded-full bg-primary px-4 py-2.5 text-center text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        שיתוף נתונים אנונימי בטבלת המועמדים באתר
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="w-full max-w-md border-t border-border/60 pt-3">
+                    <p className="mb-2 text-center text-[11px] text-muted-foreground">מקומי במחשבון בלבד</p>
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <button
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(String(result.sechem));
+                            toast.success("הסכם הועתק");
+                          } catch {
+                            toast.error("שגיאה בהעתקה");
+                          }
+                        }}
+                        className="flex items-center gap-1.5 rounded-full border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground transition-all hover:bg-accent"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        העתקה
+                      </button>
+                      <button
+                        onClick={() => {
+                          const entry = {
+                            id: `local-${Date.now()}`,
+                            university: isMorkam ? "MORKAM" : effectiveUniKey,
+                            path: selectedChannel,
+                            score: typeof result.sechem === "number" ? result.sechem : null,
+                          };
+                          const next = [entry, ...localSavedResults].slice(0, 10);
+                          setLocalSavedResults(next);
+                          localStorage.setItem("sechemeter-local-simulations", JSON.stringify(next));
+                          toast.success("התוצאה נשמרה מקומית");
+                        }}
+                        className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
+                      >
+                        <Save className="h-3.5 w-3.5" />
+                        שמירה
+                      </button>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           </motion.div>
