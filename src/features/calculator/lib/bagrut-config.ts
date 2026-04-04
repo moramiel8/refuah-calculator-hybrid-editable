@@ -10,7 +10,7 @@ export const arabMandatorySubjects = ["ערבית", "אנגלית", "היסטו�
 const bible = ["תנך", 'תנ"ך'];
 const physics = ["פיזיקה", "פיסיקה"];
 const compSci = ["מדעי המחשב", "מחשבים", "מדמח", 'מדמ"ח'];
-const toshba = ['תושב"ע', "תושבע", 'תורה שבע"פ', "תורה שבעפ", "תורה שבעל פה", 'תושבע"פ', "תושבעפ"];
+const toshba = ['תושב"ע', "תושבע", 'תורה שבע"פ', "תורה שבעפ", "תורה שבעל פה", 'תושבע"פ', "תושבעפ", "תלמוד"];
 
 // Science & technology subjects
 const sciSubjects = [...physics, "ביולוגיה", "כימיה"];
@@ -28,7 +28,7 @@ const techSubjects = [
 export const mizrafTechSubjects = [...sciSubjects, ...techSubjects];
 
 // Subjects with a very high bonus score (25+ for 5 units)
-const bonusSubjects = [...sciSubjects, "אנגלית", "היסטוריה", "ספרות", ...bible];
+const bonusSubjects = [...sciSubjects, "אנגלית", "היסטוריה", "ספרות", "ספרות ומחשבת ישראל", ...bible];
 
 // Bonus Constants
 export const noBonus = 0;

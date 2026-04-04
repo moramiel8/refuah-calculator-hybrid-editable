@@ -10,8 +10,8 @@ const queryClient = new QueryClient();
 const AppShell = () => {
   useReportIframeHeightToRefuahParent();
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <main className="mx-auto flex w-full max-w-7xl min-h-0 flex-1 flex-col px-2 py-4 sm:px-3">
+    <div className="min-h-screen w-full overflow-x-hidden bg-background">
+      <main className="mx-auto w-full min-w-0 max-w-2xl px-4 py-4">
         <CalculatorTabs />
       </main>
     </div>

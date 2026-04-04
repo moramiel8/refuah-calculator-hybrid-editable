@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, Copy, Info, Save } from "lucide-react";
 import {
@@ -24,6 +24,7 @@ import {
   type AdmissionChannel,
 } from "@/features/calculator/lib/uni-stats";
 import { toast } from "sonner";
+import { postCalculatorIframeHeightToParent } from "@/features/calculator/lib/reportIframeHeightToRefuah";
 
 type CalcMode = "initial" | "final";
 
@@ -307,59 +308,65 @@ const SechemCalculator: React.FC = () => {
     return uniDisplayNames[effectiveUniKey] ?? uniDisplayNames[iframeUniversityCode] ?? iframeUniversityCode;
   }, [selectedChannel, effectiveUniKey, iframeUniversityCode]);
 
-  const sendToParent = useCallback(
-    async (
-      type: "REFUAH_SAVE_SAKAM_TO_PROFILE" | "REFUAH_SHARE_ANON_DATA",
-      payload: Record<string, unknown>,
-    ) => {
-      if (typeof window === "undefined" || window.parent === window) {
-        toast.error("הכפתור פעיל רק כאשר המחשבון נטען בתוך Refuah (iframe)");
-        return;
-      }
+  /** מסלול בגרויות בסכם ראשוני (אפיק «בגרויות») או צמרת → בגרויות — ממוצע בגרות בשדה העליון, כמו במחשבון הבגרות. */
+  const isBagrutStyleSechemPath = useMemo(
+    () => selectedChannel === "BAGRUT" || (selectedChannel === "TZAMERET" && selectedSubChannel === "TZAMERET-BAGRUT"),
+    [selectedChannel, selectedSubChannel],
+  );
 
-      const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const ack = new Promise<{ ok: boolean; error?: string }>((resolve, reject) => {
-        const timeout = window.setTimeout(() => {
-          window.removeEventListener("message", onMessage);
-          reject(new Error("לא התקבלה תגובה מ-Refuah"));
-        }, 5000);
+  type RefuahIframeType =
+    | "REFUAH_SAVE_SAKAM_TO_PROFILE"
+    | "REFUAH_SAVE_BAGRUT_TO_PROFILE"
+    | "REFUAH_SHARE_ANON_DATA";
 
-        const onMessage = (event: MessageEvent) => {
-          const data = event.data as any;
-          if (!data || data.source !== "refuah-parent" || data.type !== "REFUAH_IFRAME_ACK" || data.requestId !== requestId) {
-            return;
-          }
-          window.clearTimeout(timeout);
-          window.removeEventListener("message", onMessage);
-          resolve({ ok: !!data.ok, error: data.error ? String(data.error) : undefined });
-        };
+  const postMessageToRefuahParent = useCallback(async (type: RefuahIframeType, payload: Record<string, unknown>) => {
+    if (typeof window === "undefined" || window.parent === window) {
+      return { ok: false as const, error: "iframe" };
+    }
 
-        window.addEventListener("message", onMessage);
-      });
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const ack = new Promise<{ ok: boolean; error?: string }>((resolve, reject) => {
+      const timeout = window.setTimeout(() => {
+        window.removeEventListener("message", onMessage);
+        reject(new Error("לא התקבלה תגובה מ-Refuah"));
+      }, 8000);
 
-      window.parent.postMessage(
-        {
-          source: "sechemeter-iframe",
-          type,
-          requestId,
-          payload,
-        },
-        "*",
-      );
-
-      try {
-        const response = await ack;
-        if (!response.ok) {
-          toast.error(response.error || "Refuah דחה את הבקשה");
+      const onMessage = (event: MessageEvent) => {
+        const data = event.data as any;
+        if (!data || data.source !== "refuah-parent" || data.type !== "REFUAH_IFRAME_ACK" || data.requestId !== requestId) {
           return;
         }
-        toast.success("הנתונים נשלחו ל-Refuah בהצלחה");
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "שגיאה בשליחת נתונים");
+        window.clearTimeout(timeout);
+        window.removeEventListener("message", onMessage);
+        resolve({ ok: !!data.ok, error: data.error ? String(data.error) : undefined });
+      };
+
+      window.addEventListener("message", onMessage);
+    });
+
+    window.parent.postMessage(
+      {
+        source: "sechemeter-iframe",
+        type,
+        requestId,
+        payload,
+      },
+      "*",
+    );
+
+    try {
+      const response = await ack;
+      if (!response.ok) {
+        return { ok: false as const, error: response.error || "Refuah דחה את הבקשה" };
       }
-    },
-    [],
-  );
+      return { ok: true as const };
+    } catch (error) {
+      return {
+        ok: false as const,
+        error: error instanceof Error ? error.message : "שגיאה בשליחת נתונים",
+      };
+    }
+  }, []);
 
   const buildSakamPayload = useCallback(
     (resultForMerge: CalcResult | null) => {
@@ -389,6 +396,102 @@ const SechemCalculator: React.FC = () => {
       (p.sakamFinal != null && Number.isFinite(Number(p.sakamFinal)))
     );
   }, [refuahSakamPayload]);
+
+  const hasBagrutAverageForRefuah = useMemo(() => {
+    if (!isBagrutStyleSechemPath) return true;
+    return Number.isFinite(Number(topValue));
+  }, [isBagrutStyleSechemPath, topValue]);
+
+  const refuahPrimaryActionsReady = hasRefuahSakamValues && hasBagrutAverageForRefuah;
+
+  const handleRefuahSaveToProfile = useCallback(async () => {
+    if (!hasRefuahSakamValues) {
+      toast.error("חישוב סכם תקין לפני שמירה לפרופיל");
+      return;
+    }
+
+    if (isBagrutStyleSechemPath) {
+      const bagrutAverage = Number(topValue);
+      if (!Number.isFinite(bagrutAverage)) {
+        toast.error("ממוצע בגרות לא תקין — כמו במחשבון הבגרות");
+        return;
+      }
+      const bagPayload = {
+        bagrutAverage,
+        universityCode: iframeUniversityCode,
+        universityName: iframeUniversityName,
+      };
+      const r1 = await postMessageToRefuahParent("REFUAH_SAVE_BAGRUT_TO_PROFILE", bagPayload);
+      if (r1.ok === false) {
+        if (r1.error === "iframe") {
+          toast.error("הכפתור פעיל רק כאשר המחשבון נטען בתוך Refuah (iframe)");
+          return;
+        }
+        toast.error(r1.error);
+        return;
+      }
+      const r2 = await postMessageToRefuahParent("REFUAH_SAVE_SAKAM_TO_PROFILE", refuahSakamPayload);
+      if (r2.ok === false) {
+        if (r2.error === "iframe") {
+          toast.error("הכפתור פעיל רק כאשר המחשבון נטען בתוך Refuah (iframe)");
+          return;
+        }
+        toast.error(r2.error);
+        return;
+      }
+      toast.success("נשמרו בפרופיל ממוצע בגרות והסכם");
+      return;
+    }
+
+    const r = await postMessageToRefuahParent("REFUAH_SAVE_SAKAM_TO_PROFILE", refuahSakamPayload);
+    if (r.ok === false) {
+      if (r.error === "iframe") {
+        toast.error("הכפתור פעיל רק כאשר המחשבון נטען בתוך Refuah (iframe)");
+        return;
+      }
+      toast.error(r.error);
+      return;
+    }
+    toast.success("הנתונים נשלחו ל-Refuah בהצלחה");
+  }, [
+    hasRefuahSakamValues,
+    isBagrutStyleSechemPath,
+    topValue,
+    iframeUniversityCode,
+    iframeUniversityName,
+    postMessageToRefuahParent,
+    refuahSakamPayload,
+  ]);
+
+  const handleRefuahShareAnon = useCallback(async () => {
+    if (!hasRefuahSakamValues) {
+      toast.error("חישוב סכם תקין לפני שיתוף");
+      return;
+    }
+
+    const payload: Record<string, unknown> = { ...refuahSakamPayload };
+    if (isBagrutStyleSechemPath) {
+      const bagrutAverage = Number(topValue);
+      const psychometric = Number(bottomValue);
+      if (!Number.isFinite(bagrutAverage)) {
+        toast.error("ממוצע בגרות לא תקין לשיתוף");
+        return;
+      }
+      payload.bagrutAverage = bagrutAverage;
+      if (Number.isFinite(psychometric)) payload.psychometric = psychometric;
+    }
+
+    const r = await postMessageToRefuahParent("REFUAH_SHARE_ANON_DATA", payload);
+    if (r.ok === false) {
+      if (r.error === "iframe") {
+        toast.error("הכפתור פעיל רק כאשר המחשבון נטען בתוך Refuah (iframe)");
+        return;
+      }
+      toast.error(r.error);
+      return;
+    }
+    toast.success("הנתונים נשמרו לשיתוף אנונימי");
+  }, [hasRefuahSakamValues, isBagrutStyleSechemPath, topValue, bottomValue, postMessageToRefuahParent, refuahSakamPayload]);
 
   const handleModeChange = (newMode: CalcMode) => {
     setMode(newMode);
@@ -443,8 +546,14 @@ const SechemCalculator: React.FC = () => {
     { id: "TZAMERET-PREP", label: "מכינה" },
   ];
 
+  useEffect(() => {
+    postCalculatorIframeHeightToParent();
+    const timeouts = [60, 180, 450, 900].map((ms) => window.setTimeout(postCalculatorIframeHeightToParent, ms));
+    return () => timeouts.forEach((id) => window.clearTimeout(id));
+  }, [result, localSavedResults.length, mode, selectedChannel, selectedUni, selectedSubChannel]);
+
   return (
-    <div className="space-y-4" dir="rtl">
+    <div className="w-full min-w-0 space-y-4" dir="rtl">
       {/* Mode Toggle */}
       <div className="flex gap-1 rounded-xl border border-border bg-card p-1 shadow-sm">
         <button
@@ -675,7 +784,7 @@ const SechemCalculator: React.FC = () => {
                 )}
               </div>
 
-              <div className="mt-5">
+              <div className="mt-5 space-y-2">
                 <button
                   onClick={handleCalculate}
                   disabled={!canCalculate || isCalculating || (!topValue && !bottomValue)}
@@ -683,6 +792,32 @@ const SechemCalculator: React.FC = () => {
                 >
                   {isCalculating ? "מחשב..." : mode === "initial" ? "חישוב סכם ראשוני" : "חישוב סכם סופי"}
                 </button>
+                <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-stretch sm:justify-center">
+                  <button
+                    type="button"
+                    onClick={() => void handleRefuahSaveToProfile()}
+                    disabled={!refuahPrimaryActionsReady}
+                    className="inline-flex min-h-[42px] min-w-0 flex-1 items-center justify-center whitespace-normal rounded-full border border-border bg-background px-3 py-2.5 text-center text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
+                  >
+                    שמירה לפרופיל באיזור האישי
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleRefuahShareAnon()}
+                    disabled={!refuahPrimaryActionsReady}
+                    className="inline-flex min-h-[42px] min-w-0 flex-1 items-center justify-center whitespace-normal rounded-full bg-primary px-3 py-2.5 text-center text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
+                  >
+                    שיתוף נתונים אנונימי בטבלת המועמדים באתר
+                  </button>
+                </div>
+                {!refuahPrimaryActionsReady && (
+                  <p className="text-center text-xs text-muted-foreground">הכפתורים יופעלו אחרי חישוב תוצאה תקינה.</p>
+                )}
+                {isBagrutStyleSechemPath && refuahPrimaryActionsReady && (
+                  <p className="text-center text-[11px] text-muted-foreground">
+                    במסלול בגרויות נשלחים גם ממוצע הבגרות מהשדה העליון.
+                  </p>
+                )}
               </div>
             </div>
           </motion.div>
@@ -761,36 +896,40 @@ const SechemCalculator: React.FC = () => {
               </div>
               {result.isValid && !result.thresholdOnly && (
                 <>
-                  <div className="flex w-full max-w-xl flex-col gap-2">
-                    <p className="text-center text-xs font-medium text-foreground">
-                      Refuah — שמירה בפרופיל ושיתוף אנונימי בטבלה
+                  <div className="w-full max-w-md border-t border-border/60 pt-4">
+                    <p className="mb-2 text-center text-[11px] text-muted-foreground">
+                      {mode === "initial" ? "שמירה ושיתוף — סכם ראשוני" : "שמירה ושיתוף — סכם סופי"}
                     </p>
-                    <div className="flex w-full flex-col items-stretch justify-center gap-2 sm:flex-row sm:flex-wrap">
+                    <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-stretch sm:justify-center">
                       <button
                         type="button"
-                        onClick={() => {
-                          if (!hasRefuahSakamValues) {
-                            toast.error("חישוב סכם תקין לפני שמירה לפרופיל");
-                            return;
-                          }
-                          void sendToParent("REFUAH_SAVE_SAKAM_TO_PROFILE", refuahSakamPayload);
-                        }}
-                        disabled={!hasRefuahSakamValues}
-                        className="inline-flex min-h-[42px] flex-1 items-center justify-center rounded-full border-2 border-border bg-background px-4 py-2.5 text-center text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                        onClick={() => void handleRefuahSaveToProfile()}
+                        disabled={!refuahPrimaryActionsReady}
+                        className="inline-flex min-h-[42px] min-w-0 flex-1 items-center justify-center whitespace-normal rounded-full border border-border bg-background px-3 py-2.5 text-center text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
                       >
                         שמירה לפרופיל באיזור האישי
                       </button>
                       <button
                         type="button"
-                        onClick={() => void sendToParent("REFUAH_SHARE_ANON_DATA", refuahSakamPayload)}
-                        disabled={!hasRefuahSakamValues}
-                        className="inline-flex min-h-[42px] flex-1 items-center justify-center rounded-full bg-primary px-4 py-2.5 text-center text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
+                        onClick={() => void handleRefuahShareAnon()}
+                        disabled={!refuahPrimaryActionsReady}
+                        className="inline-flex min-h-[42px] min-w-0 flex-1 items-center justify-center whitespace-normal rounded-full bg-primary px-3 py-2.5 text-center text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
                       >
                         שיתוף נתונים אנונימי בטבלת המועמדים באתר
                       </button>
                     </div>
+                    {!refuahPrimaryActionsReady && (
+                      <p className="mt-2 text-center text-xs text-muted-foreground">
+                        הכפתורים יופעלו כשהחישוב תקין
+                        {isBagrutStyleSechemPath ? " וממוצע הבגרות בשדה המתאים מלא." : "."}
+                      </p>
+                    )}
+                    {isBagrutStyleSechemPath && refuahPrimaryActionsReady && (
+                      <p className="mt-2 text-center text-[11px] text-muted-foreground">
+                        במסלול בגרויות נשלחים גם ממוצע הבגרות מהשדה העליון.
+                      </p>
+                    )}
                   </div>
-
                   <div className="w-full max-w-md border-t border-border/60 pt-3">
                     <p className="mb-2 text-center text-[11px] text-muted-foreground">מקומי במחשבון בלבד</p>
                     <div className="flex flex-wrap items-center justify-center gap-2">

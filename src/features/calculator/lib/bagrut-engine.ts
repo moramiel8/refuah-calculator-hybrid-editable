@@ -21,6 +21,8 @@ export interface BagrutRow {
   examType: string; // "בחינה" | "עבודה"
   bonus: number;
   included: boolean; // whether this row is included in average
+  /** שורות עם בחירת מקצוע מתפריט (ערבי / ממלכתי-דתי) */
+  subjectSlot?: "arab-culture" | "religious-literature" | "religious-toshba";
 }
 
 export interface BagrutResult {

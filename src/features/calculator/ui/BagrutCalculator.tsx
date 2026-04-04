@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Trash2, GraduationCap, Info } from "lucide-react";
 import { toast } from "sonner";
@@ -8,30 +8,60 @@ import {
   bagrutUniversityConfigs,
   examTypeExam,
   examTypeGemer,
-  getMandatorySubjects,
 } from "@/features/calculator/lib/bagrut-config";
-import { calculateBagrutAverage, type BagrutRow, type BagrutResult } from "@/features/calculator/lib/bagrut-engine";
+import { calculateBagrutAverage, type BagrutRow } from "@/features/calculator/lib/bagrut-engine";
 
 const HEB_DEFAULTS = [
   { subject: 'תנ"ך', units: 2 },
+  { subject: "ספרות", units: 2 },
   { subject: "עברית", units: 2 },
-  { subject: "אנגלית", units: 3 },
   { subject: "היסטוריה", units: 2 },
   { subject: "אזרחות", units: 2 },
-  { subject: "מתמטיקה", units: 3 },
-  { subject: "ספרות", units: 2 },
+  { subject: "אנגלית", units: 5 },
+  { subject: "מתמטיקה", units: 5 },
 ];
 
-const ARAB_DEFAULTS = [
-  { subject: "ערבית", units: 2 },
-  { subject: "אנגלית", units: 3 },
+/** מתחת לתנ״ך — ספרות / מחשבת ישראל (בחירה) */
+const RELIGIOUS_LITERATURE_OPTIONS = [
+  "ספרות ומחשבת ישראל",
+  "ספרות",
+  "מחשבת ישראל",
+] as const;
+
+/** תושב״ע — תושבע״פ או תלמוד (כמו במחשבון הרשמי) */
+const RELIGIOUS_TOSHBA_OPTIONS = ['תושבע"פ', "תלמוד"] as const;
+
+/** ברירת מחדל לממלכתי-דתי — תואם טבלת ברירת מחדל מקובלת */
+const RELIGIOUS_STATE_DEFAULTS = [
+  { subject: 'תנ"ך', units: 3 },
+  { subject: RELIGIOUS_LITERATURE_OPTIONS[0], units: 2 },
+  { subject: RELIGIOUS_TOSHBA_OPTIONS[0], units: 3 },
+  { subject: "עברית", units: 2 },
   { subject: "היסטוריה", units: 2 },
   { subject: "אזרחות", units: 2 },
-  { subject: "מתמטיקה", units: 3 },
+  { subject: "אנגלית", units: 5 },
+  { subject: "מתמטיקה", units: 5 },
+];
+
+/** סעיפי תרבות/דת במסלול ערבי — בחירה במקום שם מקצוע חופשי */
+const ARAB_CULTURE_SUBJECT_OPTIONS = [
+  "תרבות ומורשת איסלאם",
+  "מורשת ודת נוצרית",
+] as const;
+
+/** ברירת מחדל למסלול ערבי — תואם טבלת מחשבון מקובלת */
+const ARAB_DEFAULTS = [
+  { subject: "ערבית", units: 3 },
+  { subject: "עברית", units: 3 },
+  { subject: "היסטוריה", units: 2 },
+  { subject: ARAB_CULTURE_SUBJECT_OPTIONS[0], units: 1 },
+  { subject: "אזרחות", units: 2 },
+  { subject: "אנגלית", units: 5 },
+  { subject: "מתמטיקה", units: 5 },
 ];
 
 let rowIdCounter = 0;
-const makeRow = (subject = "", units = 0): BagrutRow => ({
+const makeRow = (subject = "", units = 0, subjectSlot?: BagrutRow["subjectSlot"]): BagrutRow => ({
   id: `row-${++rowIdCounter}`,
   subject,
   units,
@@ -39,15 +69,54 @@ const makeRow = (subject = "", units = 0): BagrutRow => ({
   examType: examTypeExam,
   bonus: 0,
   included: false,
+  ...(subjectSlot ? { subjectSlot } : {}),
 });
 
+function rowsForEducationType(eduType: string): BagrutRow[] {
+  const defaults =
+    eduType === "ARAB-STATE-EDUCATION"
+      ? ARAB_DEFAULTS
+      : eduType === "RELIGIOUS-STATE-EDUCATION"
+        ? RELIGIOUS_STATE_DEFAULTS
+        : HEB_DEFAULTS;
+  const newRows = defaults.map((s, i) => {
+    if (eduType === "ARAB-STATE-EDUCATION" && i === 3) {
+      return makeRow(s.subject, s.units, "arab-culture");
+    }
+    if (eduType === "RELIGIOUS-STATE-EDUCATION") {
+      if (i === 1) return makeRow(s.subject, s.units, "religious-literature");
+      if (i === 2) return makeRow(s.subject, s.units, "religious-toshba");
+    }
+    return makeRow(s.subject, s.units);
+  });
+  return newRows;
+}
+
 const BagrutCalculator: React.FC = () => {
-  const [education, setEducation] = useState("");
+  const [education, setEducation] = useState("RELIGIOUS-STATE-EDUCATION");
   const [university, setUniversity] = useState("");
-  const [rows, setRows] = useState<BagrutRow[]>(() => Array.from({ length: 5 }, () => makeRow()));
-  const [result, setResult] = useState<BagrutResult | null>(null);
+  const [rows, setRows] = useState<BagrutRow[]>(() => rowsForEducationType("RELIGIOUS-STATE-EDUCATION"));
   const [showInfo, setShowInfo] = useState(false);
   const [glowColor, setGlowColor] = useState<string | null>(null);
+
+  const liveResult = useMemo(() => {
+    if (!university || !education) return null;
+    return calculateBagrutAverage(rows, education, university);
+  }, [rows, education, university]);
+
+  const displayRows = liveResult?.rows ?? rows;
+
+  const prevAvgRef = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const avg = liveResult?.isValid ? liveResult.avg : undefined;
+    if (avg !== undefined && prevAvgRef.current !== avg) {
+      setGlowColor("primary");
+      const t = window.setTimeout(() => setGlowColor(null), 1200);
+      prevAvgRef.current = avg;
+      return () => window.clearTimeout(t);
+    }
+    prevAvgRef.current = avg;
+  }, [liveResult?.avg, liveResult?.isValid]);
 
   const uniConfig = useMemo(() => (university ? bagrutUniversityConfigs[university] : null), [university]);
   const selectedUniversityLabel = useMemo(
@@ -58,12 +127,8 @@ const BagrutCalculator: React.FC = () => {
   const handleEducationChange = useCallback((eduType: string) => {
     setEducation(eduType);
     setUniversity("");
-    setResult(null);
     setShowInfo(false);
-    const defaults = eduType === "ARAB-STATE-EDUCATION" ? ARAB_DEFAULTS : HEB_DEFAULTS;
-    const newRows = defaults.map((s) => makeRow(s.subject, s.units));
-    newRows.push(makeRow(), makeRow());
-    setRows(newRows);
+    setRows(rowsForEducationType(eduType));
   }, []);
 
   const handleAddRow = useCallback(() => {
@@ -77,17 +142,6 @@ const BagrutCalculator: React.FC = () => {
   const handleRowChange = useCallback((id: string, field: keyof BagrutRow, value: string | number) => {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
   }, []);
-
-  const handleCalculate = useCallback(() => {
-    if (!university || !education) return;
-    const res = calculateBagrutAverage(rows, education, university);
-    setResult(res);
-    setRows(res.rows);
-    if (res.isValid && res.avg) {
-      setGlowColor("primary");
-      setTimeout(() => setGlowColor(null), 1200);
-    }
-  }, [rows, university, education]);
 
   const sendToParent = useCallback(
     async (
@@ -144,7 +198,7 @@ const BagrutCalculator: React.FC = () => {
   );
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="w-full min-w-0 space-y-6" dir="rtl">
       <h2 className="text-xl font-bold tracking-tight text-foreground">מחשבון ממוצע בגרות</h2>
 
       {/* Education Type */}
@@ -192,7 +246,6 @@ const BagrutCalculator: React.FC = () => {
                 key={uni.id}
                 onClick={() => {
                   setUniversity(uni.id);
-                  setResult(null);
                 }}
                 className={`rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200 ${
                   university === uni.id
@@ -244,34 +297,93 @@ const BagrutCalculator: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           className="rounded-xl border border-border bg-card shadow-sm"
         >
-          <div className="overflow-x-auto">
+          <div className="w-full min-w-0 overflow-x-hidden">
             {/* Table Header */}
-            <div className="grid grid-cols-[minmax(100px,1fr)_60px_60px_80px_50px_36px] min-w-[440px] gap-2 border-b border-border bg-muted/30 px-4 py-3 text-xs font-medium text-muted-foreground">
-              <span>מקצוע</span>
-              <span>יח"ל</span>
-              <span>ציון</span>
-              <span>סוג</span>
-              <span>בונוס</span>
-              <span></span>
+            <div className="grid w-full grid-cols-[minmax(0,1fr)_48px_48px_64px_40px_32px] items-center gap-x-1 gap-y-1 border-b border-border bg-muted/30 px-2 py-3 text-[11px] font-medium text-muted-foreground sm:grid-cols-[minmax(0,1fr)_52px_52px_72px_44px_36px] sm:gap-x-2 sm:px-4 sm:text-xs">
+              <span className="min-w-0">מקצוע</span>
+              <span className="text-center">יח"ל</span>
+              <span className="text-center">ציון</span>
+              <span className="text-center">סוג</span>
+              <span className="text-center">בונוס</span>
+              <span />
             </div>
 
             {/* Table Rows */}
             <div className="divide-y divide-border/50">
-              {rows.map((row) => (
+              {displayRows.map((row) => (
                 <div
                   key={row.id}
-                  className={`grid grid-cols-[minmax(100px,1fr)_60px_60px_80px_50px_36px] min-w-[440px] items-center gap-2 px-4 py-2.5 transition-colors ${
+                  className={`grid w-full grid-cols-[minmax(0,1fr)_48px_48px_64px_40px_32px] items-center gap-x-1 gap-y-1 px-2 py-2.5 transition-colors sm:grid-cols-[minmax(0,1fr)_52px_52px_72px_44px_36px] sm:gap-x-2 sm:px-4 ${
                     row.included ? "bg-primary/5" : ""
                   }`}
                 >
-                  <input
-                    type="text"
-                    dir="rtl"
-                    value={row.subject}
-                    onChange={(e) => handleRowChange(row.id, "subject", e.target.value)}
-                    placeholder="שם מקצוע"
-                    className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-right text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
-                  />
+                  {education === "ARAB-STATE-EDUCATION" && row.subjectSlot === "arab-culture" ? (
+                    <select
+                      dir="rtl"
+                      value={
+                        ARAB_CULTURE_SUBJECT_OPTIONS.includes(row.subject as (typeof ARAB_CULTURE_SUBJECT_OPTIONS)[number])
+                          ? row.subject
+                          : ARAB_CULTURE_SUBJECT_OPTIONS[0]
+                      }
+                      onChange={(e) => {
+                        handleRowChange(row.id, "subject", e.target.value);
+                      }}
+                      className="min-w-0 w-full rounded-md border border-input bg-background px-1.5 py-1.5 text-right text-xs text-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring sm:px-2 sm:text-sm"
+                    >
+                      {ARAB_CULTURE_SUBJECT_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                  ) : education === "RELIGIOUS-STATE-EDUCATION" && row.subjectSlot === "religious-literature" ? (
+                    <select
+                      dir="rtl"
+                      value={
+                        RELIGIOUS_LITERATURE_OPTIONS.includes(row.subject as (typeof RELIGIOUS_LITERATURE_OPTIONS)[number])
+                          ? row.subject
+                          : RELIGIOUS_LITERATURE_OPTIONS[0]
+                      }
+                      onChange={(e) => {
+                        handleRowChange(row.id, "subject", e.target.value);
+                      }}
+                      className="min-w-0 w-full rounded-md border border-input bg-background px-1.5 py-1.5 text-right text-xs text-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring sm:px-2 sm:text-sm"
+                    >
+                      {RELIGIOUS_LITERATURE_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                  ) : education === "RELIGIOUS-STATE-EDUCATION" && row.subjectSlot === "religious-toshba" ? (
+                    <select
+                      dir="rtl"
+                      value={
+                        RELIGIOUS_TOSHBA_OPTIONS.includes(row.subject as (typeof RELIGIOUS_TOSHBA_OPTIONS)[number])
+                          ? row.subject
+                          : RELIGIOUS_TOSHBA_OPTIONS[0]
+                      }
+                      onChange={(e) => {
+                        handleRowChange(row.id, "subject", e.target.value);
+                      }}
+                      className="min-w-0 w-full rounded-md border border-input bg-background px-1.5 py-1.5 text-right text-xs text-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring sm:px-2 sm:text-sm"
+                    >
+                      {RELIGIOUS_TOSHBA_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      dir="rtl"
+                      value={row.subject}
+                      onChange={(e) => handleRowChange(row.id, "subject", e.target.value)}
+                      placeholder="שם מקצוע"
+                      className="min-w-0 w-full rounded-md border border-input bg-background px-1.5 py-1.5 text-right text-xs text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring sm:px-2 sm:text-sm"
+                    />
+                  )}
                   <input
                     type="number"
                     value={row.units || ""}
@@ -322,50 +434,46 @@ const BagrutCalculator: React.FC = () => {
         </motion.div>
       )}
 
-      {/* Calculate Button */}
+      {/* Refuah actions */}
       {university && education && (
         <div className="space-y-2">
-          <button
-            onClick={handleCalculate}
-            className="w-full rounded-lg bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition-all duration-200 hover:bg-primary/90"
-          >
-            חישוב ממוצע בגרות
-          </button>
-          <div className="flex flex-wrap items-center justify-center gap-2">
+          <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-stretch sm:justify-center">
             <button
               onClick={() =>
                 sendToParent("REFUAH_SAVE_BAGRUT_TO_PROFILE", {
-                  bagrutAverage: result?.isValid ? result.avg : null,
+                  bagrutAverage: liveResult?.isValid ? liveResult.avg : null,
                   universityCode: university.replace("-BAGRUT", ""),
-                    universityName: selectedUniversityLabel,
+                  universityName: selectedUniversityLabel,
                 })
               }
-              disabled={!result?.isValid}
-              className="rounded-lg border border-border bg-secondary px-3 py-2 text-xs font-medium text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!liveResult?.isValid}
+              className="inline-flex min-h-[42px] min-w-0 flex-1 items-center justify-center whitespace-normal rounded-full border border-border bg-background px-3 py-2.5 text-center text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
             >
               שמירה לפרופיל באיזור האישי
             </button>
             <button
               onClick={() =>
                 sendToParent("REFUAH_SHARE_ANON_DATA", {
-                  bagrutAverage: result?.isValid ? result.avg : null,
+                  bagrutAverage: liveResult?.isValid ? liveResult.avg : null,
                   universityCode: university.replace("-BAGRUT", ""),
-                    universityName: selectedUniversityLabel,
+                  universityName: selectedUniversityLabel,
                 })
               }
-              disabled={!result?.isValid}
-              className="rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!liveResult?.isValid}
+              className="inline-flex min-h-[42px] min-w-0 flex-1 items-center justify-center whitespace-normal rounded-full bg-primary px-3 py-2.5 text-center text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
             >
               שיתוף נתונים אנונימי בטבלת המועמדים באתר
             </button>
           </div>
-          {!result?.isValid && <p className="text-center text-xs text-muted-foreground">הכפתורים יופעלו אחרי חישוב תוצאה תקינה.</p>}
+          {!liveResult?.isValid && (
+            <p className="text-center text-xs text-muted-foreground">הכפתורים יופעלו כשהחישוב יהיה תקין (הזנת ציונים וכו׳).</p>
+          )}
         </div>
       )}
 
-      {/* Result */}
+      {/* Live results */}
       <AnimatePresence>
-        {result && result.isValid && (
+        {university && education && liveResult && (
           <motion.div
             initial={{ opacity: 0, y: 10, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -384,22 +492,22 @@ const BagrutCalculator: React.FC = () => {
               <div className="rounded-lg bg-background/50 p-4 text-center">
                 <p className="text-sm text-muted-foreground mb-1">ממוצע בגרות מיטבי</p>
                 <motion.p
-                  key={String(result.avg)}
+                  key={String(liveResult.avg)}
                   initial={{ scale: 0.8, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   className="text-3xl font-bold tracking-tight text-foreground"
                 >
-                  {result.avg}
+                  {liveResult.avg}
                 </motion.p>
-                {result.cappedAt && <p className="text-xs text-amber-600 mt-1">תקרה: {result.cappedAt}</p>}
+                {liveResult.cappedAt && <p className="text-xs text-amber-600 mt-1">תקרה: {liveResult.cappedAt}</p>}
               </div>
               <div className="rounded-lg bg-background/50 p-4 text-center">
                 <p className="text-sm text-muted-foreground mb-1">יח"ל בחישוב</p>
-                <p className="text-2xl font-bold text-foreground">{result.totalUnitsInCalc}</p>
+                <p className="text-2xl font-bold text-foreground">{liveResult.totalUnitsInCalc}</p>
               </div>
               <div className="rounded-lg bg-background/50 p-4 text-center">
                 <p className="text-sm text-muted-foreground mb-1">סה"כ יח"ל שהוזנו</p>
-                <p className="text-2xl font-bold text-foreground">{result.totalUnitsEntered}</p>
+                <p className="text-2xl font-bold text-foreground">{liveResult.totalUnitsEntered}</p>
               </div>
             </div>
           </motion.div>

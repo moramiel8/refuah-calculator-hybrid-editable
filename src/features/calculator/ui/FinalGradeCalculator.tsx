@@ -93,7 +93,7 @@ const FinalGradeCalculator: React.FC = () => {
   }, []);
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="w-full min-w-0 space-y-6" dir="rtl">
       <h2 className="text-xl font-bold tracking-tight text-foreground">מחשבון ציון סופי לבגרות</h2>
 
       {/* Step 1: Subject Selector */}
@@ -155,8 +155,8 @@ const FinalGradeCalculator: React.FC = () => {
             transition={{ duration: 0.2 }}
             className="rounded-xl border border-border bg-card p-5 shadow-sm space-y-4"
           >
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold text-foreground">
+            <div className="flex min-w-0 items-center justify-between gap-2">
+              <h3 className="min-w-0 break-words text-base font-semibold text-foreground">
                 חישוב ציון סופי ב{selectedBaseSubject} ({config.units} יח״ל)
               </h3>
               <button
